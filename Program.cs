@@ -12,7 +12,7 @@ namespace nfs2iso2nfs
     {
         public const int SECTOR_SIZE = 0x8000;
         public const int HEADER_SIZE = 0x200;
-        public static byte[] WII_COMMON_KEY = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+        public static byte[] WII_COMMON_KEY = ConvertHexStringToByteArray("ebe42a225e8593e448d9c5457381aaf7");
         public const int NFS_SIZE = 0xFA00000;
         public static bool dec = false;
         public static bool enc = false;
@@ -25,24 +25,23 @@ namespace nfs2iso2nfs
         public static bool passthrough = false;
         public static bool instantcc = false;
         public static bool nocc = false;
-        public static string keyFile = "..\\code\\htk.bin";
+        public static string keyFile = "../code/htk.bin";
         public static string isoFile = "game.iso";
-        public static string wiiKeyFile = "wii_common_key.bin";
         public static string nfsDir = "";
-        public static string fw_file = "..\\code\\fw.img";
+        public static string fw_file = "../code/fw.img";
 
 
-        static void Main(string[] args)
+        static int Main(string[] args)
         {
             Console.WriteLine();
-            if (checkArgs(args) == -1)
-                return;
+            if (!checkArgs(args))
+                return 1;
             byte[] key = checkKeyFiles();
             if (key == null)
-                return;
+                return 1;
             if (dec)
             {
-                byte[] header = getHeader(nfsDir + "\\hif_000000.nfs");
+                byte[] header = getHeader(nfsDir + "/hif_000000.nfs");
                 combineNFSFiles("hif.nfs");
                 EnDecryptNFS("hif.nfs", "hif_dec.nfs", key, buildZero(key.Length), false, header);
                 if (!keepFiles)
@@ -57,7 +56,7 @@ namespace nfs2iso2nfs
             else if (enc)
             {
                 if (!keepLegit || horiz_wiimote || vert_wiimote || map_shoulder_to_trigger)
-                    DoThePatching(fw_file);
+                    DoThePatching(fwFile);
                 long[] size = manipulateISO(isoFile, "hif_unpack.nfs", false);
                 byte[] header = packNFS("hif_unpack.nfs", "hif_dec.nfs", size);
                 if (!keepFiles)
@@ -72,7 +71,7 @@ namespace nfs2iso2nfs
         }
 
 
-        public static int checkArgs(string[] args)
+        public static bool checkArgs(string[] args)
         {
             for (int i = 0; i < args.Length; i++)
                 switch (args[i])
@@ -91,32 +90,32 @@ namespace nfs2iso2nfs
                         break;
                     case "-key":
                         if (i == args.Length)
-                            return -1;
+                            return false;
                         keyFile = args[i + 1];
                         i++;
                         break;
                     case "-wiikey":
                         if (i == args.Length)
-                            return -1;
+                            return false;
                         wiiKeyFile = args[i + 1];
                         i++;
                         break;
                     case "-iso":
                         if (i == args.Length)
-                            return -1;
+                            return false;
                         isoFile = args[i + 1];
                         i++;
                         break;
                     case "-nfs":
                         if (i == args.Length)
-                            return -1;
+                            return false;
                         nfsDir = args[i + 1];
                         i++;
                         break;
                     case "-fwimg":
                         if (i == args.Length)
-                            return -1;
-                        fw_file = args[i + 1];
+                            return false;
+                        fwFile = args[i + 1];
                         i++;
                         break;
                     case "-lrpatch":
@@ -146,11 +145,11 @@ namespace nfs2iso2nfs
                         Console.WriteLine();
                         Console.WriteLine("-dec            Decrypt .nfs files to an .iso file.");
                         Console.WriteLine("-enc            Encrypt an .iso file to .nfs file(s)");
-                        Console.WriteLine("-key <file>     Location of AES key file. DEFAULT: code\\htk.bin.");
+                        Console.WriteLine("-key <file>     Location of AES key file. DEFAULT: code/htk.bin.");
                         Console.WriteLine("-wiikey <file>  Location of Wii Common key file. DEFAULT: wii_common_key.bin.");
                         Console.WriteLine("-iso <file>     Location of .iso file. DEFAULT: game.iso.");
                         Console.WriteLine("-nfs <file>     Location of .nfs files. DEFAULT: current Directory.");
-                        Console.WriteLine("-fwimg <file>   Location of fw.img. DEFAULT: code\\fw.img.");
+                        Console.WriteLine("-fwimg <file>   Location of fw.img. DEFAULT: code/fw.img.");
                         Console.WriteLine("-keep           Don't delete the files produced in intermediate steps.");
                         Console.WriteLine("-legit          Don't patch fw.img to allow fakesigned content");
                         Console.WriteLine("-lrpatch        Map emulated Classic Controller's L & R to Gamepad's ZL & ZR");
@@ -161,22 +160,22 @@ namespace nfs2iso2nfs
                         Console.WriteLine("-instantcc      Report emulated Classic Controller at the very first check");
                         Console.WriteLine("-nocc           Report that no Classic Controller is connected");
                         Console.WriteLine("-help           Print this text.");
-                        return -1;
+                        return false;
                     default:
                         break;
                 }
 
             string dir = Directory.GetCurrentDirectory();
             if (!Path.IsPathRooted(keyFile))
-                keyFile = dir + "\\" + keyFile;
+                keyFile = dir + "/" + keyFile;
             if (!Path.IsPathRooted(isoFile))
-                isoFile = dir + "\\" + isoFile;
+                isoFile = dir + "/" + isoFile;
             if (!Path.IsPathRooted(wiiKeyFile))
-                wiiKeyFile = dir + "\\" + wiiKeyFile;
+                wiiKeyFile = dir + "/" + wiiKeyFile;
             if (!Path.IsPathRooted(nfsDir))
-                nfsDir = dir + "\\" + nfsDir;
+                nfsDir = dir + "/" + nfsDir;
             if (!Path.IsPathRooted(fw_file))
-                fw_file = dir + "\\" + fw_file;
+                fwFile = dir + "/" + fw_file;
 
 
             if (map_shoulder_to_trigger && horiz_wiimote || map_shoulder_to_trigger && vert_wiimote)
@@ -186,16 +185,16 @@ namespace nfs2iso2nfs
             }
 
 
-            if (dec || ((!dec && !enc) && File.Exists(nfsDir + "\\hif_000000.nfs")))
+            if (dec || ((!dec && !enc) && File.Exists(nfsDir + "/hif_000000.nfs")))
             {
                 Console.WriteLine("+++++ NFS2ISO +++++");
                 Console.WriteLine();
-                if (dec && !enc && !File.Exists(nfsDir + "\\hif_000000.nfs"))
+                if (dec && !enc && !File.Exists(nfsDir + "/hif_000000.nfs"))
                 {
                     Console.WriteLine("ERROR: .nfs files not found! Exiting...");
-                    return -1;
+                    return false;
                 }
-                else if ((!dec && !enc) && File.Exists(nfsDir + "\\hif_000000.nfs"))
+                else if ((!dec && !enc) && File.Exists(nfsDir + "/hif_000000.nfs"))
                 {
                     Console.WriteLine("You haven't specified if you want to use nfs2iso or iso2nfs");
                     Console.WriteLine("Found .nfs files! Assuming you want to use nfs2iso...");
@@ -211,12 +210,12 @@ namespace nfs2iso2nfs
                 if (!dec && enc && !File.Exists(isoFile))
                 {
                     Console.WriteLine("ERROR: .iso file not found! Exiting...");
-                    return -1;
+                    return false;
                 }
-                if (!dec && enc && !File.Exists(fw_file))
+                if (!dec && enc && !File.Exists(fwFile))
                 {
                     Console.WriteLine("ERROR: fw.img not found! Exiting...");
-                    return -1;
+                    return false;
                 }
                 else if (((dec && enc) || (!dec && !enc)) && File.Exists(isoFile))
                 {
@@ -226,14 +225,13 @@ namespace nfs2iso2nfs
                     enc = true;
                 }
             }
-
             else
             {
                 Console.WriteLine("You haven't specified if you want to use nfs2iso or iso2nfs");
                 Console.WriteLine("Found neither .iso nor .nfs files! Check -help for usage of this program.");
-                return -1;
+                return false;
             }
-            return 0;
+            return true;
         }
 
 
@@ -275,6 +273,22 @@ namespace nfs2iso2nfs
             return key;
         }
 
+        public static byte[] ConvertHexStringToByteArray(string hexString)
+        {
+            if (hexString.Length % 2 != 0)
+            {
+                throw new ArgumentException(String.Format(CultureInfo.InvariantCulture, "The binary key cannot have an odd number of digits: {0}", hexString));
+            }
+
+            byte[] data = new byte[hexString.Length / 2];
+            for (int index = 0; index < data.Length; index++)
+            {
+                string byteValue = hexString.Substring(index * 2, 2);
+                data[index] = byte.Parse(byteValue, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+            }
+
+            return data;
+        }
 
         public static byte[] getKey(string keyDir)
         {
@@ -303,7 +317,7 @@ namespace nfs2iso2nfs
             {
                 Console.WriteLine("Looking for .nfs files...");
                 int nfsNo = -1;
-                while (File.Exists(nfsDir + "\\hif_" + String.Format("{0:D6}", nfsNo + 1) + ".nfs"))
+                while (File.Exists(nfsDir + "/hif_" + String.Format("{0:D6}", nfsNo + 1) + ".nfs"))
                     nfsNo++;
                 Console.WriteLine((nfsNo + 1) + " .nfs files found!");
                 Console.WriteLine("Joining .nfs files...");
@@ -311,7 +325,7 @@ namespace nfs2iso2nfs
                 for (int i = 0; i <= nfsNo; i++)
                 {
                     Console.WriteLine("Processing hif_" + String.Format("{0:D6}", i) + ".nfs...");
-                    var nfsTemp = new BinaryReader(File.OpenRead(nfsDir + "\\hif_" + String.Format("{0:D6}", i) + ".nfs"));
+                    var nfsTemp = new BinaryReader(File.OpenRead(nfsDir + "/hif_" + String.Format("{0:D6}", i) + ".nfs"));
                     if (i == 0)
                     {
                         nfsTemp.ReadBytes(HEADER_SIZE);
@@ -333,7 +347,7 @@ namespace nfs2iso2nfs
                 do
                 {
                     Console.WriteLine("Building hif_" + String.Format("{0:D6}", i) + ".nfs...");
-                    var nfsTemp = new BinaryWriter(File.OpenWrite(Directory.GetCurrentDirectory() + "\\hif_" + String.Format("{0:D6}", i) + ".nfs"));
+                    var nfsTemp = new BinaryWriter(File.OpenWrite(Directory.GetCurrentDirectory() + "/hif_" + String.Format("{0:D6}", i) + ".nfs"));
                     nfsTemp.Write(nfs.ReadBytes(size > NFS_SIZE ? NFS_SIZE : (int)size));
                     size -= NFS_SIZE;
                     i++;
@@ -761,36 +775,28 @@ namespace nfs2iso2nfs
         {
             byte[] result = new byte[data.Length];
 
-            try
-            {
-                System.Security.Cryptography.RijndaelManaged rm = new System.Security.Cryptography.RijndaelManaged();
-                rm.Mode = System.Security.Cryptography.CipherMode.CBC;
-                rm.Padding = System.Security.Cryptography.PaddingMode.None;
-                rm.KeySize = 128;
-                rm.BlockSize = 128;
-                rm.Key = key;
-                rm.IV = iv;
+            System.Security.Cryptography.RijndaelManaged rm = new System.Security.Cryptography.RijndaelManaged();
+            rm.Mode = System.Security.Cryptography.CipherMode.CBC;
+            rm.Padding = System.Security.Cryptography.PaddingMode.None;
+            rm.KeySize = 128;
+            rm.BlockSize = 128;
+            rm.Key = key;
+            rm.IV = iv;
 
-                if (enc)
-                    using (System.Security.Cryptography.ICryptoTransform itc = rm.CreateEncryptor())
-                    {
-                        result = itc.TransformFinalBlock(data, 0, data.Length);
-                    }
-                else
-                    using (System.Security.Cryptography.ICryptoTransform itc = rm.CreateDecryptor())
-                    {
-                        result = itc.TransformFinalBlock(data, 0, data.Length);
-                    }
+            if (enc)
+                using (System.Security.Cryptography.ICryptoTransform itc = rm.CreateEncryptor())
+                {
+                    result = itc.TransformFinalBlock(data, 0, data.Length);
+                }
+            else
+                using (System.Security.Cryptography.ICryptoTransform itc = rm.CreateDecryptor())
+                {
+                    result = itc.TransformFinalBlock(data, 0, data.Length);
+                }
 
-                rm.Clear();
+            rm.Clear();
 
-                return result;
-            }
-            catch (System.Security.Cryptography.CryptographicException e)
-            {
-                Console.WriteLine("A Cryptographic error occurred: {0}", e.Message);
-                return null;
-            }
+            return result;
         }
 
 
@@ -1293,7 +1299,7 @@ namespace nfs2iso2nfs
                         patchCount++;
                     }
                 }
- 
+
                if (patchCount == 0)
                     Console.WriteLine("Instant Classic Controller report patching: Nothing to patch.");
                 else
@@ -1323,7 +1329,7 @@ namespace nfs2iso2nfs
                         patchCount++;
                     }
                 }
- 
+
                if (patchCount == 0)
                     Console.WriteLine("No Classic Controller report patching: Nothing to patch.");
                 else
