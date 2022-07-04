@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -28,7 +29,7 @@ namespace nfs2iso2nfs
         public static string keyFile = "../code/htk.bin";
         public static string isoFile = "game.iso";
         public static string nfsDir = "";
-        public static string fw_file = "../code/fw.img";
+        public static string fwFile = "../code/fw.img";
 
 
         static int Main(string[] args)
@@ -68,6 +69,7 @@ namespace nfs2iso2nfs
                 if (!keepFiles)
                     File.Delete("hif.nfs");
             }
+            return 0;
         }
 
 
@@ -92,12 +94,6 @@ namespace nfs2iso2nfs
                         if (i == args.Length)
                             return false;
                         keyFile = args[i + 1];
-                        i++;
-                        break;
-                    case "-wiikey":
-                        if (i == args.Length)
-                            return false;
-                        wiiKeyFile = args[i + 1];
                         i++;
                         break;
                     case "-iso":
@@ -170,18 +166,16 @@ namespace nfs2iso2nfs
                 keyFile = dir + "/" + keyFile;
             if (!Path.IsPathRooted(isoFile))
                 isoFile = dir + "/" + isoFile;
-            if (!Path.IsPathRooted(wiiKeyFile))
-                wiiKeyFile = dir + "/" + wiiKeyFile;
             if (!Path.IsPathRooted(nfsDir))
                 nfsDir = dir + "/" + nfsDir;
-            if (!Path.IsPathRooted(fw_file))
-                fwFile = dir + "/" + fw_file;
+            if (!Path.IsPathRooted(fwFile))
+                fwFile = dir + "/" + fwFile;
 
 
             if (map_shoulder_to_trigger && horiz_wiimote || map_shoulder_to_trigger && vert_wiimote)
             {
                 Console.WriteLine("ERROR: Please don't mix patches for Classic Controller and  Wii Remote.");
-                return -1;
+                return false;
             }
 
 
@@ -240,36 +234,10 @@ namespace nfs2iso2nfs
             Console.WriteLine("Searching for AES key file...");
             if (!File.Exists(keyFile))
             {
-                Console.WriteLine("ERROR: Could not find AES key file! Exiting...");
-                return null;
+                throw new ArgumentException("Could not find AES key file!");
             }
             byte[] key = getKey(keyFile);
-            if (key == null)
-            {
-                Console.WriteLine("ERROR: AES key file has wrong file size! Exiting...");
-                return null;
-            }
             Console.WriteLine("AES key file found!");
-
-            if (WII_COMMON_KEY[0] != 0xeb)
-            {
-                Console.WriteLine("Wii common key not found in source code. Looking for file...");
-                if (!File.Exists(wiiKeyFile))
-                {
-                    Console.WriteLine("ERROR: Could not find Wii common key file! Exiting...");
-                    return null;
-                }
-                WII_COMMON_KEY = getKey(wiiKeyFile);
-                if (key == null)
-                {
-                    Console.WriteLine("ERROR: Wii common key file has wrong file size! Exiting...");
-                    return null;
-                }
-                Console.WriteLine("Wii Common Key file found!");
-            }
-            else Console.WriteLine("Wii common key found in source code!");
-
-            Console.WriteLine();
             return key;
         }
 
@@ -296,7 +264,7 @@ namespace nfs2iso2nfs
             {
                 long keySize = keyFile.BaseStream.Length;
                 if (keySize != 16)
-                    return null;
+                    throw new ArgumentException("AES key file has wrong size!");
                 return keyFile.ReadBytes(0x10);
             }
         }
@@ -775,28 +743,28 @@ namespace nfs2iso2nfs
         {
             byte[] result = new byte[data.Length];
 
-            System.Security.Cryptography.RijndaelManaged rm = new System.Security.Cryptography.RijndaelManaged();
-            rm.Mode = System.Security.Cryptography.CipherMode.CBC;
-            rm.Padding = System.Security.Cryptography.PaddingMode.None;
-            rm.KeySize = 128;
-            rm.BlockSize = 128;
-            rm.Key = key;
-            rm.IV = iv;
+            using(System.Security.Cryptography.Aes rm = System.Security.Cryptography.Aes.Create())
+            {
+                rm.Mode = System.Security.Cryptography.CipherMode.CBC;
+                rm.Padding = System.Security.Cryptography.PaddingMode.None;
+                rm.KeySize = 128;
+                rm.BlockSize = 128;
+                rm.Key = key;
+                rm.IV = iv;
 
-            if (enc)
-                using (System.Security.Cryptography.ICryptoTransform itc = rm.CreateEncryptor())
-                {
-                    result = itc.TransformFinalBlock(data, 0, data.Length);
-                }
-            else
-                using (System.Security.Cryptography.ICryptoTransform itc = rm.CreateDecryptor())
-                {
-                    result = itc.TransformFinalBlock(data, 0, data.Length);
-                }
+                if (enc)
+                    using (System.Security.Cryptography.ICryptoTransform itc = rm.CreateEncryptor())
+                    {
+                        result = itc.TransformFinalBlock(data, 0, data.Length);
+                    }
+                else
+                    using (System.Security.Cryptography.ICryptoTransform itc = rm.CreateDecryptor())
+                    {
+                        result = itc.TransformFinalBlock(data, 0, data.Length);
+                    }
 
-            rm.Clear();
-
-            return result;
+                return result;
+            }
         }
 
 
@@ -844,21 +812,35 @@ namespace nfs2iso2nfs
             return list;
         }
 
-
-        [DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl)]
-        static extern int memcmp(byte[] b1, byte[] b2, long count);
-
         static bool ByteArrayCompare(byte[] b1, byte[] b2)
         {
-            // Validate buffers are the same length.
-            // This also ensures that the count does not exceed the length of either buffer.
-            return b1.Length == b2.Length && memcmp(b1, b2, b1.Length) == 0;
+            unsafe
+            {
+                if (b1.Length != b2.Length)
+                    return false;
+
+                int n = b1.Length;
+
+                fixed (byte *p1 = b1, p2 = b2)
+                {
+                    byte *ptr1 = p1;
+                    byte *ptr2 = p2;
+
+                    while (n-- > 0)
+                    {
+                        if (*ptr1++ != *ptr2++)
+                            return false;
+                    }
+                }
+
+                return true;
+            }
         }
 
 
-        public static void DoThePatching(string fw_file)
+        public static void DoThePatching(string fwFile)
         {
-            var input_ios = new MemoryStream(File.ReadAllBytes(fw_file));                     //copy fw.img into a memory stream
+            var input_ios = new MemoryStream(File.ReadAllBytes(fwFile));                     //copy fw.img into a memory stream
 
             Console.WriteLine("Checking fw.img's revision number...");
 
@@ -1340,7 +1322,7 @@ namespace nfs2iso2nfs
 
             // write to disk
             //FileStream patched_file = File.OpenWrite("newfw.img");                     // for testing
-            FileStream patched_file = File.OpenWrite(fw_file);                           // open file
+            FileStream patched_file = File.OpenWrite(fwFile);                           // open file
             input_ios.WriteTo(patched_file);                                             // write
             patched_file.Close();
             input_ios.Close();
