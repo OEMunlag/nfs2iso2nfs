@@ -21,8 +21,9 @@ jobs:
       with:
         dotnet-version: 8.0.x
     - name: Build
-      run: cmd /c dotnet publish -a x64 --ucr true | dir .           
-    
+      run: cmd /c dotnet publish -a x64 --ucr true
+    - name: Dir Dir lmao
+      run: dir
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v4.3.3
       with:
